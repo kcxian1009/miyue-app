@@ -451,6 +451,7 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
             <Row l="折扣後實付" r={`$${ceziC.final.toLocaleString()}`} bold rStyle={S.green}/>
             {ceziC.saved>0&&<div style={S.badge}>🎉 共省 ${ceziC.saved.toLocaleString()}</div>}
             {ceziC.orig<5000&&<div style={S.hint}>💡 再訂 ${(5000-ceziC.orig).toLocaleString()} 可達 95折</div>}
+            <div style={S.depositNote}>💰 訂金已繳：$3,000　待付：${(ceziC.final-3000).toLocaleString()}</div>
           </div>
         </ShopCard>
       )}
@@ -473,6 +474,7 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
                 </>
               )}
               <Row l="實付合計" r={`$${snfFinal.toLocaleString()}`} bold rStyle={S.green}/>
+              <div style={S.depositNote}>💰 訂金已繳：$1,000　待付：${(snfFinal-1000).toLocaleString()}</div>
             </div>
           </ShopCard>
         );
@@ -489,8 +491,10 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
                 <Row l={`每10盒送1盒（$${shiyueC.minP} 最低價）× ${shiyueC.freeQty} 盒`} r={`－$${shiyueC.freeVal.toLocaleString()}`} rStyle={S.red}/>
                 <Row l="折扣後實付" r={`$${shiyueC.final.toLocaleString()}`} bold rStyle={S.green}/>
                 <div style={S.badge}>🎉 等效省 ${shiyueC.saved.toLocaleString()}（送 {shiyueC.freeQty} 盒）</div>
+                <div style={S.depositNote}>💰 訂金已繳：$500　待付：${(shiyueC.final-500).toLocaleString()}</div>
               </>
             }
+            {!shiyueC.ok&&<div style={S.depositNote}>💰 訂金已繳：$500　待付：${(shiyueC.final-500).toLocaleString()}</div>}
           </div>
         </ShopCard>
       )}
@@ -558,14 +562,28 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
           </div>
         );
       })}
-      <div style={S.gtBox}>
-        <div style={S.gtR}><span style={S.gtL}>原價總計</span><span style={S.gtOrig}>${gOrig.toLocaleString()}</span></div>
-        {saved>0&&<div style={S.gtR}><span style={S.gtL}>優惠折抵</span><span style={S.gtSaved}>－${saved.toLocaleString()}</span></div>}
-        <div style={{...S.gtR,borderTop:"1px solid rgba(255,255,255,0.2)",paddingTop:10,marginTop:6}}>
-          <span style={{...S.gtL,fontSize:16,fontWeight:700}}>🎀 實付總計</span>
-          <span style={S.gtFinal}>${gFinal.toLocaleString()}</span>
-        </div>
-      </div>
+      {(()=>{
+        const totalDeposit=3000+500+1000;
+        const remaining=gFinal-totalDeposit;
+        return(
+          <div style={S.gtBox}>
+            <div style={S.gtR}><span style={S.gtL}>原價總計</span><span style={S.gtOrig}>${gOrig.toLocaleString()}</span></div>
+            {saved>0&&<div style={S.gtR}><span style={S.gtL}>優惠折抵</span><span style={S.gtSaved}>－${saved.toLocaleString()}</span></div>}
+            <div style={{...S.gtR,borderTop:"1px solid rgba(255,255,255,0.2)",paddingTop:10,marginTop:6}}>
+              <span style={{...S.gtL,fontSize:16,fontWeight:700}}>🎀 實付總計</span>
+              <span style={S.gtFinal}>${gFinal.toLocaleString()}</span>
+            </div>
+            <div style={{...S.gtR,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.15)"}}>
+              <span style={{...S.gtL,fontSize:13}}>💰 訂金已繳（冊子$3,000＋十月甜$500＋四月南風$1,000）</span>
+              <span style={{color:"#F5A5A0",fontSize:13,fontWeight:600}}>－$4,500</span>
+            </div>
+            <div style={{...S.gtR,marginTop:4}}>
+              <span style={{...S.gtL,fontSize:16,fontWeight:700}}>📌 尚待付款</span>
+              <span style={{color:"#FFE5A0",fontSize:22,fontWeight:800}}>${remaining.toLocaleString()}</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -677,6 +695,7 @@ const styles={
   filterBtn:{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",border:"1.5px solid",borderRadius:20,cursor:"pointer",fontSize:13,fontWeight:600,flex:1,justifyContent:"center"},
   filterBadge:{display:"inline-block",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700},
   groupLabel:{fontSize:13,fontWeight:600,padding:"10px 4px 7px",borderBottom:"1px solid",marginBottom:8,marginTop:6},
+  depositNote:{marginTop:8,backgroundColor:"#F0F7FF",color:"#4A6FA5",borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:600,borderLeft:"3px solid #5B86C0"},
 };
 
 
