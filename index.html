@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>🎀 彌月禮分配表</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #FBF8F5; }
+    input, select, textarea { font-size: 16px !important; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+const SHOPS = {
+  冊子: { color:"#C8956C", bg:"#FDF3EC", products:[
+    { name:"單層手工餅乾", price:240, tier:"single" },
+    { name:"單層8兩油飯蜂蜜蛋糕", price:270, tier:"single" },
+    { name:"雙層16兩油飯雞腿紅蛋", price:420, tier:"double" },
+  ]},
+  四月南風: { color:"#6B9E78", bg:"#EDF6F0", products:[
+    { name:"原味長崎蛋糕", price:230, tier:null },
+  ]},
+  十月甜: { color:"#8E6BAD", bg:"#F4EFF9", products:[
+    { name:"雪藏藍莓波士頓派", price:252, tier:null },
+    { name:"奶香可可波士頓派", price:252, tier:null },
+    { name:"雪藏濃芋波士頓派", price:265, tier:null },
+    { name:"10兩油飯咕咕大雞腿", price:329, tier:null },
+    { name:"雪藏原味波士頓派", price:238, tier:null },
+  ]},
+};
+const SHOP_NAMES = Object.keys(SHOPS);
+const CATEGORIES = ["子賢-親戚","子賢-同事","子賢-朋友","凱西-親戚","凱西-同事","凱西-朋友"];
+const LS_KEY = "miyue-list-v1";
+
+function calcCezi(items) {
+  const orig = items.reduce((s,i)=>s+i.price*i.qty,0);
+  let rate=1, label="未達折扣門檻";
+  if(orig>=30000){rate=0.88;label="滿$30000 → 88折";}
+  else if(orig>=20000){rate=0.90;label="滿$20000 → 9折";}
+  else if(orig>=10000){rate=0.92;label="滿$10000 → 92折";}
+  else if(orig>=5000){rate=0.95;label="滿$5000 → 95折";}
+  const afterRate=Math.round(orig*rate);
+  const sq=items.filter(i=>i.tier==="single").reduce((s,i)=>s+i.qty,0);
+  const dq=items.filter(i=>i.tier==="double").reduce((s,i)=>s+i.qty,0);
+  const final=afterRate-sq*10-dq*20;
+  return {orig,afterRate,final,saved:orig-final,label,sq,dq,rate};
+}
+
+function calcShiyue(items) {
+  const qty=items.reduce((s,i)=>s+i.qty,0);
+  const orig=items.reduce((s,i)=>s+i.price*i.qty,0);
+  if(qty<20) return{orig,final:orig,saved:0,freeQty:0,qty,ok:false,freeVal:0};
+  const freeQty=Math.floor(qty/10);
+  const minP=Math.min(...items.map(i=>i.price));
+  const freeVal=freeQty*minP;
+  return{orig,final:orig-freeVal,saved:freeVal,freeQty,qty,ok:true,freeVal,minP};
+}
+
+const newP=()=>({id:Date.now()+Math.random(),name:"",category:"子賢-親戚",shop:"",product:"",qty:1,delivery:"",note:""});
+
+function fromLS(){
+  try{
+    const r=localStorage.getItem(LS_KEY);
+    if(!r) return[];
+    const p=JSON.parse(r);
+    return Array.isArray(p)?p:[];
+  }catch{return[];}
+}
+
+function App(){
+  const [list,setList]=useState(fromLS);
+  const [tab,setTab]=useState("list");
+  const [msg,setMsg]=useState("");
+  const fileRef=useRef(null);
+  const [modal,setModal]=useState(null);
+  const [draft,setDraft]=useState(null);
+  const [ownerFilter,setOwnerFilter]=useState("全部");
+  const [deleteTarget,setDeleteTarget]=useState(null); // { id, name }
+
+  useEffect(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(list));}catch{}},[list]);
+
+  // 防止 iOS 自動縮放：確保所有輸入欄 font-size >= 16px
+  useEffect(()=>{
+    const style=document.createElement("style");
+    style.id="miyue-ios-fix";
+    style.textContent="input,select,textarea{font-size:16px!important;}";
+    if(!document.getElementById("miyue-ios-fix")) document.head.appendChild(style);
+    return()=>{const el=document.getElementById("miyue-ios-fix");if(el)el.remove();};
+  },[]);
+
+  const confirmDel=(id)=>{
+    const p=list.find(x=>x.id===id);
+    if(p) setDeleteTarget({id,name:p.name||"此筆名單"});
+  };
+  const doDel=()=>{
+    if(!deleteTarget)return;
+    setList(l=>l.filter(p=>p.id!==deleteTarget.id));
+    setDeleteTarget(null);
+  };
+  const openAdd=()=>{ setDraft(newP()); setModal({mode:"add"}); };
+  const openEdit=(id)=>{ const p=list.find(x=>x.id===id); if(p){setDraft({...p});setModal({mode:"edit",id});} };
+  const closeModal=()=>{ setModal(null); setDraft(null); };
+  const updDraft=(f,v)=>setDraft(d=>{ const u={...d,[f]:v}; if(f==="shop")u.product=""; return u; });
+  const saveDraft=()=>{
+    if(!draft)return;
+    if(modal.mode==="add"){ setList(l=>[draft,...l]); }
+    else { setList(l=>l.map(p=>p.id===draft.id?draft:p)); }
+    closeModal();
+  };
+
+  const doExport=()=>{
+    const b=new Blob([JSON.stringify(list,null,2)],{type:"application/json"});
+    const u=URL.createObjectURL(b);
+    const a=document.createElement("a");
+    a.href=u; a.download="彌月名單_"+new Date().toLocaleDateString("zh-TW").replace(/\//g,"-")+".json";
+    a.click(); URL.revokeObjectURL(u);
+    setMsg("✅ 匯出成功！"); setTimeout(()=>setMsg(""),2500);
+  };
+
+  const doImport=(e)=>{
+    const f=e.target.files?.[0]; if(!f)return;
+    const r=new FileReader();
+    r.onload=(ev)=>{
+      try{
+        const p=JSON.parse(ev.target.result);
+        if(Array.isArray(p)&&p.length>0){setList(p);setMsg("✅ 載入 "+p.length+" 筆成功");}
+      }catch{setMsg("❌ 載入失敗");}
+      setTimeout(()=>setMsg(""),3000);
+    };
+    r.readAsText(f); e.target.value="";
+  };
+
+  const shopItems=useMemo(()=>{
+    const res={};SHOP_NAMES.forEach(s=>{res[s]={};});
+    list.forEach(({shop,product,qty})=>{
+      if(!shop||!product)return;
+      const prod=SHOPS[shop]?.products.find(p=>p.name===product);
+      if(!prod)return;
+      const n=Number(qty)||1;
+      if(!res[shop][product])res[shop][product]={price:prod.price,tier:prod.tier,qty:0};
+      res[shop][product].qty+=n;
+    });
+    return res;
+  },[list]);
+
+  const ceziC=useMemo(()=>{
+    const it=Object.entries(shopItems["冊子"]).map(([,v])=>({...v}));
+    return it.length===0?null:calcCezi(it);
+  },[shopItems]);
+
+  const shiyueC=useMemo(()=>{
+    const it=Object.entries(shopItems["十月甜"]).map(([,v])=>({...v}));
+    return it.length===0?null:calcShiyue(it);
+  },[shopItems]);
+
+  const snfTotal=useMemo(()=>Object.values(shopItems["四月南風"]).reduce((s,v)=>s+v.price*v.qty,0),[shopItems]);
+  const gOrig=(ceziC?.orig||0)+snfTotal+(shiyueC?.orig||0);
+  const gFinal=(ceziC?.final||0)+snfTotal+(shiyueC?.final||0);
+  const filled=list.filter(p=>p.name&&p.shop&&p.product).length;
+  const S=styles;
+
+  return(
+    <div style={S.page}>
+      <header style={S.header}>
+        <div style={S.hInner}>
+          <div>
+            <h1 style={S.title}>🎀 彌月禮分配表</h1>
+            <p style={S.sub}>共 {list.length} 筆　已填妥 {filled} 筆　<span style={{color:"#C8956C"}}>自動儲存中 💾</span></p>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:7}}>
+            <div style={S.tabBar}>
+              <button style={{...S.tabBtn,...(tab==="list"?S.tabOn:{})}} onClick={()=>setTab("list")}>名單填寫</button>
+              <button style={{...S.tabBtn,...(tab==="sum"?S.tabOn:{})}} onClick={()=>setTab("sum")}>統計總表</button>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {msg&&<span style={S.msgBadge}>{msg}</span>}
+              <button style={S.toolBtn} onClick={doExport}>⬇ 匯出備份</button>
+              <button style={S.toolBtn} onClick={()=>fileRef.current?.click()}>⬆ 載入備份</button>
+              <input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={doImport}/>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main style={S.main}>
+        {tab==="list"?(
+          <>
+            {/* 篩選列 */}
+            <div style={S.filterBar}>
+              {["全部","子賢","凱西"].map(o=>{
+                const count=o==="全部"?list.length:list.filter(p=>p.category.startsWith(o)).length;
+                const active=ownerFilter===o;
+                const color=o==="子賢"?"#5B86C0":o==="凱西"?"#C06B8A":"#C8956C";
+                return(
+                  <button key={o} onClick={()=>setOwnerFilter(o)}
+                    style={{...S.filterBtn,backgroundColor:active?color:"#fff",color:active?"#fff":color,borderColor:color}}>
+                    {o==="全部"?"👥 全部":o==="子賢"?"💙 子賢":"💗 凱西"}
+                    <span style={{...S.filterBadge,backgroundColor:active?"rgba(255,255,255,0.25)":color+"18",color:active?"#fff":color}}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {list.length===0&&(
+              <div style={{textAlign:"center",color:"#C0A898",padding:"60px 0 40px",fontSize:15}}>
+                <div style={{fontSize:40,marginBottom:12}}>🎀</div>
+                還沒有名單，點右下角 ＋ 開始新增
+              </div>
+            )}
+
+            {ownerFilter==="全部"?(
+              list.map((p,i)=>(
+                <ListRow key={p.id} p={p} i={i}
+                  onEdit={()=>openEdit(p.id)} onDel={()=>confirmDel(p.id)} canDel={list.length>1}/>
+              ))
+            ):(
+              ["親戚","同事","朋友"].map(type=>{
+                const subList=list.filter(p=>p.category===ownerFilter+"-"+type);
+                if(subList.length===0) return null;
+                const catColor=ownerFilter==="子賢"?"#5B86C0":"#C06B8A";
+                return(
+                  <div key={type} style={{marginBottom:4}}>
+                    <div style={{...S.groupLabel,color:catColor,borderColor:catColor+"30"}}>
+                      <span style={{display:"inline-block",backgroundColor:catColor,color:"#fff",borderRadius:10,padding:"2px 10px",fontSize:12,marginRight:8}}>
+                        {ownerFilter}-{type}
+                      </span>
+                      <span style={{fontSize:13,color:"#A09080"}}>{subList.length} 人</span>
+                    </div>
+                    {subList.map(p=>{
+                      const realIdx=list.indexOf(p);
+                      return(
+                        <ListRow key={p.id} p={p} i={realIdx}
+                          onEdit={()=>openEdit(p.id)} onDel={()=>confirmDel(p.id)} canDel={list.length>1}/>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            )}
+            <div style={{height:80}}/>
+          </>
+        ):(
+          <Summary shopItems={shopItems} list={list} ceziC={ceziC} shiyueC={shiyueC} snfTotal={snfTotal} gOrig={gOrig} gFinal={gFinal}/>
+        )}
+      </main>
+
+      {tab==="list"&&(
+        <button style={S.fab} onClick={openAdd}>＋</button>
+      )}
+
+      {modal&&draft&&(
+        <div style={S.overlay} onClick={closeModal}>
+          <div style={S.modalBox} onClick={e=>e.stopPropagation()}>
+            <div style={S.modalH}>
+              <span style={S.modalTitle}>{modal.mode==="add"?"✨ 新增名單":"✏️ 編輯名單"}</span>
+              <button style={S.modalClose} onClick={closeModal}>✕</button>
+            </div>
+            <div style={S.modalBody}><CardForm p={draft} upd={updDraft}/></div>
+            <div style={S.modalFoot}>
+              <button style={S.cancelBtn} onClick={closeModal}>取消</button>
+              <button style={S.saveBtn} onClick={saveDraft}>{modal.mode==="add"?"＋ 新增":"✓ 儲存"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 刪除確認彈窗 */}
+      {deleteTarget&&(
+        <div style={S.overlay} onClick={()=>setDeleteTarget(null)}>
+          <div style={{...S.modalBox,maxHeight:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={S.modalH}>
+              <span style={S.modalTitle}>🗑 確認刪除</span>
+              <button style={S.modalClose} onClick={()=>setDeleteTarget(null)}>✕</button>
+            </div>
+            <div style={{padding:"24px 20px",textAlign:"center"}}>
+              <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+              <p style={{fontSize:15,color:"#4A3728",margin:"0 0 6px",lineHeight:1.6}}>
+                請問要刪除
+              </p>
+              <p style={{fontSize:18,fontWeight:700,color:"#C0392B",margin:"0 0 16px"}}>
+                「{deleteTarget.name}」
+              </p>
+              <p style={{fontSize:13,color:"#A09080",margin:0}}>
+                刪除後無法復原
+              </p>
+            </div>
+            <div style={S.modalFoot}>
+              <button style={S.cancelBtn} onClick={()=>setDeleteTarget(null)}>取消</button>
+              <button style={{...S.saveBtn,backgroundColor:"#C0392B"}} onClick={doDel}>確認刪除</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ListRow({p,i,onEdit,onDel,canDel}){
+  const shop=SHOPS[p.shop];
+  const prod=shop?.products.find(pp=>pp.name===p.product);
+  const qty=p.qty||1;
+  const S=styles;
+  const shopColor=shop?.color||"#CCC";
+  const [owner]=p.category.split("-");
+  const catColor=owner==="子賢"?"#5B86C0":"#C06B8A";
+  const incomplete=!p.name||!p.shop||!p.product;
+  return(
+    <div style={{...S.listRow,borderLeft:"3px solid "+(incomplete?"#F5C69A":shopColor)}} onClick={onEdit}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
+        <span style={{fontSize:12,color:"#C0A898",fontWeight:600,flexShrink:0}}>#{i+1}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <span style={{fontWeight:700,fontSize:14,color:incomplete?"#C0A898":"#3D2E22"}}>
+              {p.name||"（未填姓名）"}
+            </span>
+            <span style={{display:"inline-block",backgroundColor:catColor+"22",color:catColor,borderRadius:8,padding:"1px 7px",fontSize:11,fontWeight:600}}>{p.category}</span>
+            {p.delivery&&<span style={{display:"inline-block",padding:"1px 7px",borderRadius:8,fontSize:11,fontWeight:600,backgroundColor:p.delivery==="宅配"?"#EAF0FA":"#EDF6F0",color:p.delivery==="宅配"?"#5B86C0":"#6B9E78"}}>{p.delivery==="宅配"?"📦":"🤝"} {p.delivery}</span>}
+          </div>
+          <div style={{fontSize:12,color:"#9A8878",marginTop:3}}>
+            {p.shop
+              ?<><span style={{color:shopColor,fontWeight:600}}>{p.shop}</span>{p.product?" · "+p.product+(qty>1?" × "+qty:""):""}</>
+              :<span style={{color:"#DDD"}}>尚未選擇店家與產品</span>
+            }
+            {prod&&<span style={{marginLeft:8,color:"#C8956C",fontWeight:600}}>${(prod.price*qty).toLocaleString()}</span>}
+          </div>
+          {p.note&&<div style={{fontSize:11,color:"#B8A898",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📝 {p.note}</div>}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+        <button style={S.editBtn} onClick={onEdit}>✏️</button>
+        {canDel&&<button style={S.delBtn2} onClick={onDel}>🗑</button>}
+      </div>
+    </div>
+  );
+}
+
+function CardForm({p,upd}){
+  const shop=SHOPS[p.shop];
+  const prod=shop?.products.find(pp=>pp.name===p.product);
+  const qty=p.qty||1;
+  const S=styles;
+  return(
+    <div>
+      <div style={S.g2}>
+        <div style={S.f}>
+          <label style={S.lbl}>姓名 / 稱呼</label>
+          <input style={S.inp} placeholder="請輸入" value={p.name} onChange={e=>upd("name",e.target.value)}/>
+        </div>
+        <div style={S.f}>
+          <label style={S.lbl}>類別</label>
+          <select style={S.sel} value={p.category} onChange={e=>upd("category",e.target.value)}>
+            {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{...S.f,marginBottom:12}}>
+        <label style={S.lbl}>選擇店家</label>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+          {SHOP_NAMES.map(s=>(
+            <button key={s} onClick={()=>upd("shop",s)}
+              style={{...S.shopBtn,backgroundColor:p.shop===s?SHOPS[s].color:"#fff",color:p.shop===s?"#fff":"#555",borderColor:SHOPS[s].color}}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+      {p.shop&&(
+        <div style={{...S.prodBox,backgroundColor:shop.bg}}>
+          <label style={S.lbl}>選擇產品</label>
+          <div style={{display:"flex",flexDirection:"column",gap:7,marginTop:7}}>
+            {shop.products.map(pp=>(
+              <button key={pp.name} onClick={()=>upd("product",pp.name)}
+                style={{...S.prodBtn,backgroundColor:p.product===pp.name?shop.color:"#fff",color:p.product===pp.name?"#fff":"#444",borderColor:shop.color}}>
+                <span style={{display:"flex",flexDirection:"column",gap:2,textAlign:"left"}}>
+                  <span>{pp.name}</span>
+                  {pp.tier&&<span style={{fontSize:11,opacity:0.75}}>{pp.tier==="single"?"（單層 -$10/盒）":"（雙層 -$20/盒）"}</span>}
+                </span>
+                <span style={S.prodP}>${pp.price}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={S.g2}>
+        <div style={{...S.f,marginBottom:8}}>
+          <label style={S.lbl}>數量</label>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginTop:4}}>
+            <button style={S.qBtn} onClick={()=>upd("qty",Math.max(1,qty-1))}>－</button>
+            <span style={S.qNum}>{qty}</span>
+            <button style={S.qBtn} onClick={()=>upd("qty",qty+1)}>＋</button>
+          </div>
+        </div>
+        <div style={S.f}>
+          <label style={S.lbl}>寄送方式</label>
+          <div style={{display:"flex",gap:8,marginTop:4}}>
+            {["宅配","親送"].map(d=>(
+              <button key={d} onClick={()=>upd("delivery",p.delivery===d?"":d)}
+                style={{flex:1,padding:"8px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:600,
+                  borderColor:p.delivery===d?(d==="宅配"?"#5B86C0":"#6B9E78"):"#E8E0D8",
+                  backgroundColor:p.delivery===d?(d==="宅配"?"#5B86C0":"#6B9E78"):"#fff",
+                  color:p.delivery===d?"#fff":"#888"}}>
+                {d==="宅配"?"📦 宅配":"🤝 親送"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={S.f}>
+        <label style={S.lbl}>備註（地址、收件資訊、特殊需求等）</label>
+        <textarea style={{...S.inp,resize:"vertical",minHeight:60,lineHeight:1.6}}
+          placeholder="選填，可填寫收件地址、特殊需求…"
+          value={p.note} onChange={e=>upd("note",e.target.value)}/>
+      </div>
+      {prod&&(
+        <div style={{textAlign:"right",fontSize:13,marginTop:8,paddingTop:8,borderTop:"1px dashed #EDE8E3",color:shop.color}}>
+          小計：${prod.price} × {qty} = <strong>${(prod.price*qty).toLocaleString()}</strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
+  const filled=list.filter(p=>p.name&&p.shop&&p.product);
+  const saved=gOrig-gFinal;
+  const S=styles;
+  return(
+    <div>
+      {ceziC&&(
+        <ShopCard shopName="冊子" items={shopItems["冊子"]}>
+          <div style={S.dd}>
+            <div style={S.ddT}>🏷️ 優惠明細</div>
+            <Row l="原價合計" r={`$${ceziC.orig.toLocaleString()}`}/>
+            <Row l={ceziC.label} r={ceziC.rate<1?`－$${(ceziC.orig-ceziC.afterRate).toLocaleString()}`:"—"} rStyle={ceziC.rate<1?S.red:S.gray}/>
+            {ceziC.sq>0&&<Row l={`單層折扣（${ceziC.sq} 盒×$10）`} r={`－$${(ceziC.sq*10).toLocaleString()}`} rStyle={S.red}/>}
+            {ceziC.dq>0&&<Row l={`雙層折扣（${ceziC.dq} 盒×$20）`} r={`－$${(ceziC.dq*20).toLocaleString()}`} rStyle={S.red}/>}
+            <Row l="折扣後實付" r={`$${ceziC.final.toLocaleString()}`} bold rStyle={S.green}/>
+            {ceziC.saved>0&&<div style={S.badge}>🎉 共省 ${ceziC.saved.toLocaleString()}</div>}
+            {ceziC.orig<5000&&<div style={S.hint}>💡 再訂 ${(5000-ceziC.orig).toLocaleString()} 可達 95折</div>}
+          </div>
+        </ShopCard>
+      )}
+      {snfTotal>0&&(
+        <ShopCard shopName="四月南風" items={shopItems["四月南風"]}>
+          <div style={S.dd}>
+            <div style={S.ddT}>🏷️ 費用</div>
+            <Row l="合計" r={`$${snfTotal.toLocaleString()}`} bold rStyle={S.green}/>
+          </div>
+        </ShopCard>
+      )}
+      {shiyueC&&(
+        <ShopCard shopName="十月甜" items={shopItems["十月甜"]}>
+          <div style={S.dd}>
+            <div style={S.ddT}>🏷️ 優惠明細</div>
+            <Row l="總盒數" r={`${shiyueC.qty} 盒`}/>
+            <Row l="原價合計" r={`$${shiyueC.orig.toLocaleString()}`}/>
+            {!shiyueC.ok
+              ?<div style={S.hint}>💡 需滿 20 盒才享優惠，還差 {20-shiyueC.qty} 盒</div>
+              :<>
+                <Row l={`每10盒送1盒（$${shiyueC.minP} 最低價）× ${shiyueC.freeQty} 盒`} r={`－$${shiyueC.freeVal.toLocaleString()}`} rStyle={S.red}/>
+                <Row l="折扣後實付" r={`$${shiyueC.final.toLocaleString()}`} bold rStyle={S.green}/>
+                <div style={S.badge}>🎉 等效省 ${shiyueC.saved.toLocaleString()}（送 {shiyueC.freeQty} 盒）</div>
+              </>
+            }
+          </div>
+        </ShopCard>
+      )}
+      {SHOP_NAMES.map(sn=>{
+        const sp=filled.filter(p=>p.shop===sn);
+        if(sp.length===0)return null;
+        const sc=SHOPS[sn].color, sb=SHOPS[sn].bg;
+        const sOrig=sp.reduce((s,p)=>{const pr=SHOPS[sn]?.products.find(pp=>pp.name===p.product);return s+(pr?pr.price*(p.qty||1):0);},0);
+        const sQty=sp.reduce((s,p)=>s+(p.qty||1),0);
+        return(
+          <div key={sn} style={{...S.sCard,borderColor:sc}}>
+            <div style={{...S.sH,backgroundColor:sc}}>
+              <span style={S.sHN}>📋 {sn}　名單明細</span>
+              <span style={S.sHS}>共 {sp.length} 人　{sQty} 份　原價 ${sOrig.toLocaleString()}</span>
+            </div>
+            <table style={S.tbl}>
+              <thead><tr style={S.thead}>
+                <th style={S.th}>#</th><th style={S.th}>姓名</th><th style={S.th}>類別</th>
+                <th style={S.th}>產品</th><th style={{...S.th,textAlign:"center"}}>數量</th>
+                <th style={{...S.th,textAlign:"center"}}>寄送</th>
+                <th style={{...S.th,textAlign:"right"}}>原價</th><th style={S.th}>備註</th>
+              </tr></thead>
+              <tbody>
+                {(()=>{
+                  let idx=0;
+                  return CATEGORIES.map(cat=>{
+                    const cp=sp.filter(p=>p.category===cat);
+                    if(cp.length===0)return null;
+                    const [ow]=cat.split("-");
+                    const cc=ow==="子賢"?"#5B86C0":"#C06B8A";
+                    const ct=cp.reduce((s,p)=>{const pr=SHOPS[sn]?.products.find(pp=>pp.name===p.product);return s+(pr?pr.price*(p.qty||1):0);},0);
+                    return[
+                      <tr key={"g"+sn+cat} style={{backgroundColor:cc+"14"}}>
+                        <td colSpan={6} style={{...S.td,padding:"7px 10px",fontSize:12,color:cc,fontWeight:700}}>
+                          <span style={{display:"inline-block",backgroundColor:cc,color:"#fff",borderRadius:10,padding:"1px 9px",fontSize:11,marginRight:6}}>{cat}</span>
+                          {cp.reduce((s,p)=>s+(p.qty||1),0)} 份
+                        </td>
+                        <td style={{...S.td,textAlign:"right",color:cc,fontWeight:700,fontSize:12,padding:"7px 10px"}}>${ct.toLocaleString()}</td>
+                        <td style={S.td}></td>
+                      </tr>,
+                      ...cp.map((p,ii)=>{
+                        idx++;
+                        const pr=SHOPS[sn]?.products.find(pp=>pp.name===p.product);
+                        const amt=pr?pr.price*(p.qty||1):0;
+                        return(
+                          <tr key={p.id} style={ii%2===0?S.tr:{...S.tr,backgroundColor:sb+"88"}}>
+                            <td style={{...S.td,color:"#ccc",fontSize:11}}>{idx}</td>
+                            <td style={{...S.td,fontWeight:600}}>{p.name}</td>
+                            <td style={S.td}><span style={{display:"inline-block",backgroundColor:cc+"20",color:cc,borderRadius:8,padding:"1px 7px",fontSize:11,fontWeight:600}}>{cat}</span></td>
+                            <td style={S.td}>{p.product}</td>
+                            <td style={{...S.td,textAlign:"center"}}>{p.qty||1}</td>
+                            <td style={{...S.td,textAlign:"center"}}>
+                              {p.delivery?<span style={{display:"inline-block",padding:"1px 8px",borderRadius:8,fontSize:11,fontWeight:600,backgroundColor:p.delivery==="宅配"?"#EAF0FA":"#EDF6F0",color:p.delivery==="宅配"?"#5B86C0":"#6B9E78"}}>{p.delivery==="宅配"?"📦 宅配":"🤝 親送"}</span>:<span style={{color:"#DDD"}}>—</span>}
+                            </td>
+                            <td style={{...S.td,textAlign:"right"}}>${amt.toLocaleString()}</td>
+                            <td style={{...S.td,color:"#999",fontSize:11,whiteSpace:"pre-wrap",maxWidth:110}}>{p.note}</td>
+                          </tr>
+                        );
+                      })
+                    ];
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      <div style={S.gtBox}>
+        <div style={S.gtR}><span style={S.gtL}>原價總計</span><span style={S.gtOrig}>${gOrig.toLocaleString()}</span></div>
+        {saved>0&&<div style={S.gtR}><span style={S.gtL}>優惠折抵</span><span style={S.gtSaved}>－${saved.toLocaleString()}</span></div>}
+        <div style={{...S.gtR,borderTop:"1px solid rgba(255,255,255,0.2)",paddingTop:10,marginTop:6}}>
+          <span style={{...S.gtL,fontSize:16,fontWeight:700}}>🎀 實付總計</span>
+          <span style={S.gtFinal}>${gFinal.toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShopCard({shopName,items,children}){
+  const shop=SHOPS[shopName];
+  const rows=Object.entries(items);
+  const qty=rows.reduce((s,[,v])=>s+v.qty,0);
+  const orig=rows.reduce((s,[,v])=>s+v.price*v.qty,0);
+  const S=styles;
+  return(
+    <div style={{...S.sCard,borderColor:shop.color}}>
+      <div style={{...S.sH,backgroundColor:shop.color}}>
+        <span style={S.sHN}>{shopName}</span>
+        <span style={S.sHS}>共 {qty} 份　原價 ${orig.toLocaleString()}</span>
+      </div>
+      <table style={S.tbl}>
+        <thead><tr style={S.thead}>
+          <th style={S.th}>產品名稱</th>
+          <th style={{...S.th,textAlign:"center"}}>單價</th>
+          <th style={{...S.th,textAlign:"center"}}>數量</th>
+          <th style={{...S.th,textAlign:"right"}}>小計</th>
+        </tr></thead>
+        <tbody>
+          {rows.map(([n,{price,qty:q}])=>(
+            <tr key={n} style={S.tr}>
+              <td style={S.td}>{n}</td>
+              <td style={{...S.td,textAlign:"center"}}>${price}</td>
+              <td style={{...S.td,textAlign:"center"}}>{q}</td>
+              <td style={{...S.td,textAlign:"right",fontWeight:600}}>${(price*q).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {children}
+    </div>
+  );
+}
+
+function Row({l,r,bold,rStyle}){
+  return(
+    <div style={styles.ddRow}>
+      <span>{l}</span>
+      <span style={{...rStyle,...(bold?{fontWeight:700,fontSize:14}:{})}}>{r}</span>
+    </div>
+  );
+}
+
+const styles={
+  page:{fontFamily:"'Noto Sans TC','PingFang TC',sans-serif",backgroundColor:"#FBF8F5",minHeight:"100vh"},
+  header:{backgroundColor:"#fff",borderBottom:"1px solid #EDE8E3",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.04)"},
+  hInner:{maxWidth:760,margin:"0 auto",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"},
+  title:{margin:0,fontSize:18,color:"#4A3728",fontWeight:700},
+  sub:{margin:"2px 0 0",fontSize:12,color:"#A09080"},
+  tabBar:{display:"flex",gap:6},
+  tabBtn:{padding:"6px 15px",border:"1.5px solid #D4C5B8",borderRadius:20,backgroundColor:"#fff",color:"#888",cursor:"pointer",fontSize:13,fontWeight:500},
+  tabOn:{backgroundColor:"#C8956C",borderColor:"#C8956C",color:"#fff"},
+  main:{maxWidth:760,margin:"0 auto",padding:"16px 14px 80px"},
+  g2:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12},
+  f:{display:"flex",flexDirection:"column",gap:5},
+  lbl:{fontSize:12,color:"#9A8878",fontWeight:600,letterSpacing:"0.03em"},
+  inp:{border:"1.5px solid #E8E0D8",borderRadius:8,padding:"8px 10px",fontSize:14,color:"#3D2E22",outline:"none",backgroundColor:"#fff"},
+  sel:{border:"1.5px solid #E8E0D8",borderRadius:8,padding:"8px 10px",fontSize:14,color:"#3D2E22",outline:"none",backgroundColor:"#fff"},
+  shopBtn:{padding:"7px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:500},
+  prodBox:{borderRadius:10,padding:"12px 14px",marginBottom:12},
+  prodBtn:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:13,textAlign:"left"},
+  prodP:{fontWeight:700,fontSize:13,whiteSpace:"nowrap",marginLeft:8},
+  qBtn:{width:30,height:30,borderRadius:"50%",border:"1.5px solid #D4C5B8",backgroundColor:"#fff",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#7A6A5A"},
+  qNum:{fontSize:18,fontWeight:700,color:"#3D2E22",minWidth:24,textAlign:"center"},
+  listRow:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,backgroundColor:"#fff",borderRadius:12,border:"1px solid #EDE8E3",padding:"13px 16px",marginBottom:10,cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
+  editBtn:{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"4px 6px",borderRadius:6,color:"#B0A090"},
+  delBtn2:{background:"none",border:"none",fontSize:16,cursor:"pointer",padding:"4px 6px",borderRadius:6,color:"#D4B0A0"},
+  fab:{position:"fixed",bottom:28,right:24,width:52,height:52,borderRadius:"50%",backgroundColor:"#C8956C",color:"#fff",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 16px rgba(200,149,108,0.45)",zIndex:200,lineHeight:1},
+  overlay:{position:"fixed",inset:0,backgroundColor:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+  modalBox:{backgroundColor:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:600,maxHeight:"90vh",display:"flex",flexDirection:"column"},
+  modalH:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px 12px",borderBottom:"1px solid #EDE8E3"},
+  modalTitle:{fontSize:16,fontWeight:700,color:"#4A3728"},
+  modalClose:{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#BBB",padding:"2px 8px",lineHeight:1},
+  modalBody:{overflowY:"auto",padding:"16px 20px",flex:1},
+  modalFoot:{display:"flex",gap:10,padding:"12px 20px",borderTop:"1px solid #EDE8E3"},
+  cancelBtn:{flex:1,padding:"12px",border:"1.5px solid #D4C5B8",borderRadius:10,backgroundColor:"#fff",color:"#888",cursor:"pointer",fontSize:15,fontWeight:600},
+  saveBtn:{flex:2,padding:"12px",border:"none",borderRadius:10,backgroundColor:"#C8956C",color:"#fff",cursor:"pointer",fontSize:15,fontWeight:700},
+  sCard:{backgroundColor:"#fff",borderRadius:12,border:"1.5px solid #EDE8E3",overflow:"hidden",marginBottom:14},
+  sH:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 16px",color:"#fff"},
+  sHN:{fontSize:15,fontWeight:700},
+  sHS:{fontSize:12,opacity:0.9},
+  tbl:{width:"100%",borderCollapse:"collapse"},
+  thead:{backgroundColor:"#FAF8F6"},
+  th:{padding:"8px 10px",fontSize:11,color:"#9A8878",fontWeight:700,textAlign:"left",borderBottom:"1px solid #EDE8E3"},
+  tr:{borderBottom:"1px solid #F2EDE8"},
+  td:{padding:"9px 10px",fontSize:12,color:"#3D2E22"},
+  dd:{padding:"12px 14px",backgroundColor:"#FDFAF7",borderTop:"1px solid #EDE8E3"},
+  ddT:{fontSize:11,fontWeight:700,color:"#9A8878",marginBottom:7,letterSpacing:"0.04em"},
+  ddRow:{display:"flex",justifyContent:"space-between",fontSize:12,color:"#5A4A3A",padding:"4px 0",borderBottom:"1px dashed #EDE8E3"},
+  red:{color:"#C0392B",fontWeight:600},
+  gray:{color:"#AAA"},
+  green:{color:"#2C6E49",fontWeight:700},
+  badge:{marginTop:7,backgroundColor:"#FFF0ED",color:"#C0392B",borderRadius:8,padding:"5px 9px",fontSize:11,fontWeight:600},
+  hint:{marginTop:7,backgroundColor:"#FFF8E6",color:"#B07A00",borderRadius:8,padding:"5px 9px",fontSize:11,fontWeight:600},
+  gtBox:{backgroundColor:"#4A3728",borderRadius:12,padding:"14px 20px",marginTop:6},
+  gtR:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"},
+  gtL:{color:"rgba(255,255,255,0.75)",fontSize:13},
+  gtOrig:{color:"rgba(255,255,255,0.5)",fontSize:13,textDecoration:"line-through"},
+  gtSaved:{color:"#F5A5A0",fontSize:13,fontWeight:600},
+  gtFinal:{color:"#F5C69A",fontSize:22,fontWeight:800},
+  toolBtn:{padding:"5px 11px",border:"1.5px solid #D4C5B8",borderRadius:16,backgroundColor:"#fff",color:"#7A6A5A",cursor:"pointer",fontSize:11,fontWeight:600},
+  msgBadge:{fontSize:11,color:"#2C6E49",fontWeight:600,backgroundColor:"#EAF5EE",padding:"3px 9px",borderRadius:12},
+  filterBar:{display:"flex",gap:8,marginBottom:16},
+  filterBtn:{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",border:"1.5px solid",borderRadius:20,cursor:"pointer",fontSize:13,fontWeight:600,flex:1,justifyContent:"center"},
+  filterBadge:{display:"inline-block",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700},
+  groupLabel:{fontSize:13,fontWeight:600,padding:"10px 4px 7px",borderBottom:"1px solid",marginBottom:8,marginTop:6},
+};
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
