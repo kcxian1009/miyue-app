@@ -164,7 +164,7 @@ function App(){
 
   const snfTotal=useMemo(()=>Object.values(shopItems["四月南風"]).reduce((s,v)=>s+v.price*v.qty,0),[shopItems]);
   const snfQtyTotal=useMemo(()=>Object.values(shopItems["四月南風"]).reduce((s,v)=>s+v.qty,0),[shopItems]);
-  const snfCardCost=snfTotal>=6000?0:snfQtyTotal*3;
+  const snfCardCost=snfQtyTotal>=30?0:snfQtyTotal*6;
   const snfFinal=snfTotal+snfCardCost;
   const gOrig=(ceziC?.orig||0)+snfTotal+(shiyueC?.orig||0);
   const gFinal=(ceziC?.final||0)+snfFinal+(shiyueC?.final||0);
@@ -456,8 +456,8 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
       )}
       {snfTotal>0&&(()=>{
         const snfQty=Object.values(shopItems["四月南風"]).reduce((s,v)=>s+v.qty,0);
-        const cardFree=snfTotal>=6000;
-        const cardCost=cardFree?0:snfQty*3;
+        const cardFree=snfQty>=30;
+        const cardCost=cardFree?0:snfQty*6;
         const snfFinal=snfTotal+cardCost;
         return(
           <ShopCard shopName="四月南風" items={shopItems["四月南風"]}>
@@ -465,11 +465,11 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
               <div style={S.ddT}>🏷️ 費用明細</div>
               <Row l="原價合計" r={`$${snfTotal.toLocaleString()}`}/>
               {cardFree?(
-                <Row l={`彌月卡 ${snfQty} 張（滿$6000免費）`} r="免費" rStyle={S.green}/>
+                <Row l={`彌月卡 ${snfQty} 張（滿30盒免費）`} r="免費" rStyle={S.green}/>
               ):(
                 <>
-                  <Row l={`彌月卡 ${snfQty} 張 × $3`} r={`＋$${cardCost}`} rStyle={{color:"#B07A00",fontWeight:600}}/>
-                  {snfTotal<6000&&<div style={S.hint}>💡 再訂 ${(6000-snfTotal).toLocaleString()} 可達 $6000，彌月卡免費</div>}
+                  <Row l={`彌月卡 ${snfQty} 張 × $6`} r={`＋$${cardCost}`} rStyle={{color:"#B07A00",fontWeight:600}}/>
+                  {snfQty<30&&<div style={S.hint}>💡 再訂 ${30-snfQty} 盒可達 30 盒，彌月卡免費</div>}
                 </>
               )}
               <Row l="實付合計" r={`$${snfFinal.toLocaleString()}`} bold rStyle={S.green}/>
