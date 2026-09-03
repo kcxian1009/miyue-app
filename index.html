@@ -66,6 +66,69 @@ function calcShiyue(items) {
 
 const newP=()=>({id:Date.now()+Math.random(),name:"",category:"子賢-親戚",shop:"",product:"",qty:1,delivery:"",note:""});
 
+// 依明細計算子賢／凱西各自的原價與優惠後實付
+// 冊子：整批合計金額決定折扣區間（rate 由 calcCezi 算出），各自原價×rate後，再依自己的單層-$10／雙層-$20 明細扣除
+// 四月南風：無折扣，彌月卡每盒$6，滿30盒（合計）全部免收
+// 十月甜：買10送1（無法內扣，需滿11盒才送1盒，滿22盒送2盒...），送的是全單「最低價」品項；
+//   依「最低價品項」由誰訂的比例，把該筆折抵金額歸給該人，不去計價
+function calcOwnerStats(list, ceziC, shiyueC) {
+  const owners = ["子賢", "凱西"];
+  const getProd = (shop, product) => SHOPS[shop]?.products.find(p => p.name === product);
+
+  const ceziOrig = { 子賢: 0, 凱西: 0 };
+  const ceziSQ = { 子賢: 0, 凱西: 0 };
+  const ceziDQ = { 子賢: 0, 凱西: 0 };
+  const snfOrig = { 子賢: 0, 凱西: 0 };
+  const snfQty = { 子賢: 0, 凱西: 0 };
+  const shiyueOrig = { 子賢: 0, 凱西: 0 };
+  const shiyueMinQty = { 子賢: 0, 凱西: 0 };
+
+  list.forEach(p => {
+    if (!p.shop || !p.product) return;
+    const owner = p.category.split("-")[0];
+    if (!owners.includes(owner)) return;
+    const prod = getProd(p.shop, p.product);
+    if (!prod) return;
+    const qty = Number(p.qty) || 1;
+    const amt = prod.price * qty;
+    if (p.shop === "冊子") {
+      ceziOrig[owner] += amt;
+      if (prod.tier === "single") ceziSQ[owner] += qty;
+      if (prod.tier === "double") ceziDQ[owner] += qty;
+    } else if (p.shop === "四月南風") {
+      snfOrig[owner] += amt;
+      snfQty[owner] += qty;
+    } else if (p.shop === "十月甜") {
+      shiyueOrig[owner] += amt;
+      if (shiyueC && shiyueC.ok && prod.price === shiyueC.minP) shiyueMinQty[owner] += qty;
+    }
+  });
+
+  const rate = ceziC ? ceziC.rate : 1;
+  const snfQtyTotal = snfQty["子賢"] + snfQty["凱西"];
+  const cardFree = snfQtyTotal >= 30;
+  const minQtyTotal = shiyueMinQty["子賢"] + shiyueMinQty["凱西"];
+
+  const out = {};
+  owners.forEach(o => {
+    const ceziFinal = Math.round(ceziOrig[o] * rate) - ceziSQ[o] * 10 - ceziDQ[o] * 20;
+    const snfFinal = snfOrig[o] + (cardFree ? 0 : snfQty[o] * 6);
+    let shiyueFreeVal = 0;
+    if (shiyueC && shiyueC.ok && minQtyTotal > 0) {
+      shiyueFreeVal = Math.round(shiyueC.freeVal * (shiyueMinQty[o] / minQtyTotal));
+    }
+    const shiyueFinal = shiyueOrig[o] - shiyueFreeVal;
+    out[o] = {
+      cezi: { orig: ceziOrig[o], final: ceziFinal },
+      snf: { orig: snfOrig[o], final: snfFinal },
+      shiyue: { orig: shiyueOrig[o], final: shiyueFinal, freeVal: shiyueFreeVal },
+      orig: ceziOrig[o] + snfOrig[o] + shiyueOrig[o],
+      final: ceziFinal + snfFinal + shiyueFinal,
+    };
+  });
+  return out;
+}
+
 const DEFAULT_LIST = [{"id": 1788363530333.8652, "name": "雅雯姐姐", "category": "凱西-親戚", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1788362440524.0288, "name": "曹小", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "", "note": ""}, {"id": 1788362132843.0974, "name": "林文吉", "category": "子賢-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1788362097091.3748, "name": "蕭小", "category": "子賢-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "", "note": ""}, {"id": 1788361998235.5022, "name": "朱朱", "category": "凱西-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": "7-11連城門市 朱于婷 0919456591"}, {"id": 1788192313877.7688, "name": "虎哥", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1788192273805.47, "name": "楊SIR", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1788192091523.158, "name": "亮哥", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1788191366795.6018, "name": "莊小", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1788058028137.0278, "name": "阿D", "category": "子賢-朋友", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787840718033.6245, "name": "邱區", "category": "子賢-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787840705521.0742, "name": "志清", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787757873682.1807, "name": "老王", "category": "子賢-朋友", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": "去店家自取後親送"}, {"id": 1787757493057.3323, "name": "宥彰", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787757231938.9382, "name": "嘉欣", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": "欣怡幫忙"}, {"id": 1787756983153.2832, "name": "坤龍", "category": "子賢-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787756854122.204, "name": "瓊徵", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": "歐弟幫送"}, {"id": 1787489991444.3489, "name": "宜旂", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787489822210.8508, "name": "鄺小", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": "請志虔拿給他"}, {"id": 1787489340098.9065, "name": "英世", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787489304033.674, "name": "郭小", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787489284033.3582, "name": "信富", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787489265010.2566, "name": "盈任", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": "應該可以自取"}, {"id": 1787489210762.3672, "name": "自己", "category": "子賢-親戚", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 5, "delivery": "親送", "note": "預留4盒"}, {"id": 1787489168154.762, "name": "蔡慧娟", "category": "子賢-朋友", "shop": "十月甜", "product": "雪藏濃芋波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787488993137.5203, "name": "駱慈", "category": "子賢-朋友", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787488800361.0933, "name": "承澔", "category": "子賢-朋友", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1787455834781.3457, "name": "龍成宮", "category": "凱西-親戚", "shop": "冊子", "product": "單層8兩油飯蜂蜜蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1783406867922.6626, "name": "更當", "category": "凱西-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1001, "name": "方元禮", "category": "子賢-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1002, "name": "建智", "category": "子賢-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1004, "name": "虔爺", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1005, "name": "裕辰學長", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1009, "name": "高雄市總教官", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1010, "name": "吉哥", "category": "子賢-朋友", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": "去店家自取後親送"}, {"id": 1011, "name": "宥銘", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1012, "name": "寢室*2", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏原味波士頓派", "qty": 2, "delivery": "親送", "note": "2寢、3寢"}, {"id": 1013, "name": "內勤*5", "category": "子賢-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 5, "delivery": "親送", "note": ""}, {"id": 1014, "name": "副座", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1015, "name": "隊長", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1016, "name": "呂總", "category": "子賢-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1017, "name": "思涵", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1018, "name": "煒璁", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1019, "name": "斌哥", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1020, "name": "歐弟", "category": "子賢-同事", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1021, "name": "柏凱", "category": "子賢-同事", "shop": "冊子", "product": "單層8兩油飯蜂蜜蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1022, "name": "暄", "category": "子賢-朋友", "shop": "冊子", "product": "單層8兩油飯蜂蜜蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1023, "name": "白佳代", "category": "子賢-朋友", "shop": "冊子", "product": "單層8兩油飯蜂蜜蛋糕", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1024, "name": "欣樺", "category": "子賢-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1025, "name": "陳中偉", "category": "子賢-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1026, "name": "江", "category": "子賢-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1027, "name": "佩雯", "category": "子賢-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1028, "name": "洪sir", "category": "子賢-同事", "shop": "冊子", "product": "單層8兩油飯蜂蜜蛋糕", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1029, "name": "福安宮", "category": "凱西-親戚", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1030, "name": "臨水夫人廟", "category": "凱西-親戚", "shop": "冊子", "product": "單層8兩油飯蜂蜜蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1031, "name": "育如", "category": "凱西-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1032, "name": "Addie", "category": "凱西-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1033, "name": "仙女", "category": "凱西-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1034, "name": "校花", "category": "凱西-朋友", "shop": "冊子", "product": "單層手工餅乾", "qty": 1, "delivery": "宅配", "note": ""}, {"id": 1035, "name": "設計部-公司", "category": "凱西-同事", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1036, "name": "公司", "category": "凱西-同事", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1037, "name": "總經理", "category": "凱西-同事", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1038, "name": "育侖", "category": "凱西-同事", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1039, "name": "思棠姐", "category": "凱西-同事", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1040, "name": "老闆", "category": "凱西-同事", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1043, "name": "小惠", "category": "凱西-朋友", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1044, "name": "小葳", "category": "凱西-朋友", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1045, "name": "晉雯", "category": "凱西-朋友", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1046, "name": "信含", "category": "凱西-朋友", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1047, "name": "大姐", "category": "凱西-親戚", "shop": "四月南風", "product": "原味長崎蛋糕", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1048, "name": "啾吉-小柏", "category": "凱西-朋友", "shop": "十月甜", "product": "奶香可可波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1049, "name": "啾吉-姊姊", "category": "凱西-朋友", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1050, "name": "姊姊", "category": "凱西-親戚", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1051, "name": "叔叔", "category": "凱西-親戚", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1052, "name": "小姑姑", "category": "凱西-親戚", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1053, "name": "昭銘哥哥", "category": "凱西-親戚", "shop": "十月甜", "product": "雪藏藍莓波士頓派", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1054, "name": "大伯", "category": "凱西-親戚", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}, {"id": 1055, "name": "爸爸媽媽", "category": "凱西-親戚", "shop": "冊子", "product": "雙層16兩油飯雞腿紅蛋", "qty": 1, "delivery": "親送", "note": ""}];
 
 function fromLS(){
@@ -169,6 +232,7 @@ function App(){
   const snfFinal=snfTotal+snfCardCost;
   const gOrig=(ceziC?.orig||0)+snfTotal+(shiyueC?.orig||0);
   const gFinal=(ceziC?.final||0)+snfFinal+(shiyueC?.final||0);
+  const ownerStats=useMemo(()=>calcOwnerStats(list,ceziC,shiyueC),[list,ceziC,shiyueC]);
   const filled=list.filter(p=>p.name&&p.shop&&p.product).length;
   const S=styles;
 
@@ -255,7 +319,7 @@ function App(){
             <div style={{height:80}}/>
           </>
         ):(
-          <Summary shopItems={shopItems} list={list} ceziC={ceziC} shiyueC={shiyueC} snfTotal={snfTotal} gOrig={gOrig} gFinal={gFinal}/>
+          <Summary shopItems={shopItems} list={list} ceziC={ceziC} shiyueC={shiyueC} snfTotal={snfTotal} gOrig={gOrig} gFinal={gFinal} ownerStats={ownerStats}/>
         )}
       </main>
 
@@ -435,7 +499,7 @@ function CardForm({p,upd}){
   );
 }
 
-function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
+function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal,ownerStats}){
   const filled=list.filter(p=>p.name&&p.shop&&p.product);
   const saved=gOrig-gFinal;
   const S=styles;
@@ -563,6 +627,52 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal}){
           </div>
         );
       })}
+      {ownerStats&&(()=>{
+        const S2=styles;
+        const rows=[
+          {key:"cezi",label:"冊子",note:"整批依合計金額打折後，再依單層-$10／雙層-$20扣除"},
+          {key:"snf",label:"四月南風",note:"無折扣，彌月卡每盒$6（合計滿30盒全免）"},
+          {key:"shiyue",label:"十月甜",note:"買10送1需滿11盒才生效，送的最低價盒依訂購比例歸屬不計價"},
+        ];
+        return(
+          <div style={{...S2.sCard,borderColor:"#D4C5B8"}}>
+            <div style={{...S2.sH,backgroundColor:"#4A3728"}}>
+              <span style={S2.sHN}>👫 子賢／凱西 費用分攤</span>
+              <span style={S2.sHS}>依明細分別計算原價與優惠後實付</span>
+            </div>
+            <table style={S2.tbl}>
+              <thead><tr style={S2.thead}>
+                <th style={S2.th}>店家</th>
+                <th style={{...S2.th,textAlign:"right",color:"#5B86C0"}}>💙子賢 原價</th>
+                <th style={{...S2.th,textAlign:"right",color:"#5B86C0"}}>💙子賢 優惠價</th>
+                <th style={{...S2.th,textAlign:"right",color:"#C06B8A"}}>💗凱西 原價</th>
+                <th style={{...S2.th,textAlign:"right",color:"#C06B8A"}}>💗凱西 優惠價</th>
+              </tr></thead>
+              <tbody>
+                {rows.map(r=>(
+                  <tr key={r.key} style={S2.tr}>
+                    <td style={S2.td}>
+                      {r.label}
+                      <div style={{fontSize:10,color:"#B0A090",marginTop:2}}>{r.note}</div>
+                    </td>
+                    <td style={{...S2.td,textAlign:"right"}}>${ownerStats["子賢"][r.key].orig.toLocaleString()}</td>
+                    <td style={{...S2.td,textAlign:"right",fontWeight:700,color:"#2C6E49"}}>${ownerStats["子賢"][r.key].final.toLocaleString()}</td>
+                    <td style={{...S2.td,textAlign:"right"}}>${ownerStats["凱西"][r.key].orig.toLocaleString()}</td>
+                    <td style={{...S2.td,textAlign:"right",fontWeight:700,color:"#2C6E49"}}>${ownerStats["凱西"][r.key].final.toLocaleString()}</td>
+                  </tr>
+                ))}
+                <tr style={{...S2.tr,backgroundColor:"#FAF8F6"}}>
+                  <td style={{...S2.td,fontWeight:700}}>合計</td>
+                  <td style={{...S2.td,textAlign:"right",fontWeight:700}}>${ownerStats["子賢"].orig.toLocaleString()}</td>
+                  <td style={{...S2.td,textAlign:"right",fontWeight:800,color:"#2C6E49"}}>${ownerStats["子賢"].final.toLocaleString()}</td>
+                  <td style={{...S2.td,textAlign:"right",fontWeight:700}}>${ownerStats["凱西"].orig.toLocaleString()}</td>
+                  <td style={{...S2.td,textAlign:"right",fontWeight:800,color:"#2C6E49"}}>${ownerStats["凱西"].final.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
       {(()=>{
         const totalDeposit=3000+500+1000;
         const remaining=gFinal-totalDeposit;
