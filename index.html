@@ -38,6 +38,7 @@ const SHOPS = {
 const SHOP_NAMES = Object.keys(SHOPS);
 const CATEGORIES = ["子賢-親戚","子賢-同事","子賢-朋友","凱西-親戚","凱西-同事","凱西-朋友"];
 const LS_KEY = "miyue-list-v1";
+const LS_NOTES_KEY = "miyue-shop-notes-v1";
 
 function calcCezi(items) {
   const orig = items.reduce((s,i)=>s+i.price*i.qty,0);
@@ -140,6 +141,15 @@ function fromLS(){
   }catch{return DEFAULT_LIST;}
 }
 
+function notesFromLS(){
+  try{
+    const r=localStorage.getItem(LS_NOTES_KEY);
+    if(!r) return {};
+    const p=JSON.parse(r);
+    return p&&typeof p==="object"?p:{};
+  }catch{return {};}
+}
+
 function App(){
   const [list,setList]=useState(fromLS);
   const [tab,setTab]=useState("list");
@@ -149,8 +159,11 @@ function App(){
   const [draft,setDraft]=useState(null);
   const [ownerFilter,setOwnerFilter]=useState("全部");
   const [deleteTarget,setDeleteTarget]=useState(null); // { id, name }
+  const [shopNotes,setShopNotes]=useState(notesFromLS);
 
   useEffect(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(list));}catch{}},[list]);
+  useEffect(()=>{try{localStorage.setItem(LS_NOTES_KEY,JSON.stringify(shopNotes));}catch{}},[shopNotes]);
+  const updShopNote=(shop,val)=>setShopNotes(n=>({...n,[shop]:val}));
 
   // 防止 iOS 自動縮放：確保所有輸入欄 font-size >= 16px
   useEffect(()=>{
@@ -319,7 +332,7 @@ function App(){
             <div style={{height:80}}/>
           </>
         ):(
-          <Summary shopItems={shopItems} list={list} ceziC={ceziC} shiyueC={shiyueC} snfTotal={snfTotal} gOrig={gOrig} gFinal={gFinal} ownerStats={ownerStats}/>
+          <Summary shopItems={shopItems} list={list} ceziC={ceziC} shiyueC={shiyueC} snfTotal={snfTotal} gOrig={gOrig} gFinal={gFinal} ownerStats={ownerStats} shopNotes={shopNotes} updShopNote={updShopNote}/>
         )}
       </main>
 
@@ -499,7 +512,7 @@ function CardForm({p,upd}){
   );
 }
 
-function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal,ownerStats}){
+function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal,ownerStats,shopNotes,updShopNote}){
   const filled=list.filter(p=>p.name&&p.shop&&p.product);
   const saved=gOrig-gFinal;
   const S=styles;
@@ -518,6 +531,7 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal,ownerStats}
             {ceziC.orig<5000&&<div style={S.hint}>💡 再訂 ${(5000-ceziC.orig).toLocaleString()} 可達 95折</div>}
             <div style={S.depositNote}>💰 訂金已繳：$3,000　待付：${(ceziC.final-3000).toLocaleString()}</div>
           </div>
+          <NoteBox value={shopNotes["冊子"]||""} onChange={v=>updShopNote("冊子",v)}/>
         </ShopCard>
       )}
       {snfTotal>0&&(()=>{
@@ -541,6 +555,7 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal,ownerStats}
               <Row l="實付合計" r={`$${snfFinal.toLocaleString()}`} bold rStyle={S.green}/>
               <div style={S.depositNote}>💰 訂金已繳：$1,000　待付：${(snfFinal-1000).toLocaleString()}</div>
             </div>
+            <NoteBox value={shopNotes["四月南風"]||""} onChange={v=>updShopNote("四月南風",v)}/>
           </ShopCard>
         );
       })()}
@@ -561,6 +576,7 @@ function Summary({shopItems,list,ceziC,shiyueC,snfTotal,gOrig,gFinal,ownerStats}
             }
             {!shiyueC.ok&&<div style={S.depositNote}>💰 訂金已繳：$500　待付：${(shiyueC.final-500).toLocaleString()}</div>}
           </div>
+          <NoteBox value={shopNotes["十月甜"]||""} onChange={v=>updShopNote("十月甜",v)}/>
         </ShopCard>
       )}
       {SHOP_NAMES.map(sn=>{
@@ -743,6 +759,21 @@ function Row({l,r,bold,rStyle}){
   );
 }
 
+function NoteBox({value,onChange}){
+  const S=styles;
+  return(
+    <div style={S.noteWrap}>
+      <div style={S.noteLabel}>📝 備註</div>
+      <textarea
+        style={S.noteTa}
+        placeholder="在這裡寫下這間店的備註…"
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
 const styles={
   page:{fontFamily:"'Noto Sans TC','PingFang TC',sans-serif",backgroundColor:"#FBF8F5",minHeight:"100vh"},
   header:{backgroundColor:"#fff",borderBottom:"1px solid #EDE8E3",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.04)"},
@@ -807,6 +838,9 @@ const styles={
   filterBadge:{display:"inline-block",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700},
   groupLabel:{fontSize:13,fontWeight:600,padding:"10px 4px 7px",borderBottom:"1px solid",marginBottom:8,marginTop:6},
   depositNote:{marginTop:8,backgroundColor:"#F0F7FF",color:"#4A6FA5",borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:600,borderLeft:"3px solid #5B86C0"},
+  noteWrap:{padding:"10px 14px 14px",borderTop:"1px dashed #EDE8E3"},
+  noteLabel:{fontSize:11,fontWeight:700,color:"#9A8878",marginBottom:6,letterSpacing:"0.04em"},
+  noteTa:{width:"100%",minHeight:60,border:"1.5px solid #E8E0D8",borderRadius:8,padding:"8px 10px",fontSize:13,color:"#3D2E22",outline:"none",backgroundColor:"#fff",resize:"vertical",fontFamily:"inherit"},
 };
 
 
